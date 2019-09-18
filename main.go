@@ -63,7 +63,7 @@ func main() {
 		<-quitChan
 	}()
 
-	//download(downloadURLs, 5)
+	download(downloadURLs, 5)
 
 	signChan := make(chan os.Signal, 1)
 	signal.Notify(signChan, os.Interrupt)
@@ -76,11 +76,12 @@ func download(downloadURLs []DownloadURL, nParallel int) {
 	downloadChan := make(chan DownloadURL, nParallel)
 
 	go func() {
-		du := <-downloadChan
-		if err := du.Download(); err != nil {
-			log.Fatalf("fail to download %s: %v", du.Title, err)
+		for du := range downloadChan {
+			if err := du.Download(); err != nil {
+				log.Fatalf("fail to download %s: %v", du.Title, err)
+			}
+			wg.Done()
 		}
-		wg.Done()
 	}()
 
 	for _, du := range downloadURLs {
@@ -89,6 +90,7 @@ func download(downloadURLs []DownloadURL, nParallel int) {
 	}
 
 	wg.Wait()
+	close(downloadChan)
 }
 
 func collectDownloadURLs(startURL string) ([]DownloadURL, error) {
