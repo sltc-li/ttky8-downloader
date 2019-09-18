@@ -6,31 +6,32 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"os/exec"
 	"strconv"
 	"time"
 )
 
+func NewServer(downloadURLs []DownloadURL) *server {
+	rand.Seed(time.Now().UnixNano())
+	addr := ":" + strconv.Itoa(10_000+rand.Intn(10_000))
+	return &server{
+		downloadURLs: downloadURLs,
+		addr:         addr,
+	}
+}
+
 type server struct {
 	downloadURLs []DownloadURL
+	addr         string
+}
+
+func (s *server) URL() string {
+	return "http://localhost" + s.addr
 }
 
 func (s *server) Start() error {
-	rand.Seed(time.Now().UnixNano())
-	addr := ":" + strconv.Itoa(10_000+rand.Intn(10_000))
-	http.Handle("/", s.HandleIndex(addr))
+	http.Handle("/", s.HandleIndex(s.addr))
 	http.Handle("/update", s.HandleUpdate())
-	errChan := make(chan error)
-	go func() {
-		errChan <- http.ListenAndServe(addr, nil)
-	}()
-	timer := time.NewTimer(time.Second)
-	select {
-	case err := <-errChan:
-		return err
-	case <-timer.C:
-		return exec.Command("open", "http://localhost"+addr).Run()
-	}
+	return http.ListenAndServe(s.addr, nil)
 }
 
 func (s *server) HandleIndex(addr string) http.HandlerFunc {

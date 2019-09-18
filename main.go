@@ -45,19 +45,30 @@ func main() {
 		}
 	}
 
-	svr := &server{downloadURLs: downloadURLs}
+	svr := NewServer(downloadURLs)
 	go func() {
-		err := svr.Start()
-		if err != nil {
+		log.Print("listening " + svr.URL())
+		if err := svr.Start(); err != nil {
 			log.Printf("fail to start server: %v", err)
 		}
 	}()
 
-	download(downloadURLs, 5)
+	quitChan := make(chan interface{})
+	go func() {
+		ctx, cancel := newChromedp(false)
+		defer cancel()
+		if err := chromedp.Run(ctx, chromedp.Navigate(svr.URL())); err != nil {
+			log.Printf("fail to open server url: %v", err)
+		}
+		<-quitChan
+	}()
+
+	//download(downloadURLs, 5)
 
 	signChan := make(chan os.Signal, 1)
 	signal.Notify(signChan, os.Interrupt)
 	<-signChan
+	close(quitChan)
 }
 
 func download(downloadURLs []DownloadURL, nParallel int) {
@@ -172,7 +183,7 @@ func newChromedp(headless bool) (context.Context, context.CancelFunc) {
 	}
 	if !headless {
 		opts = append(opts,
-			//chromedp.Flag("headless", false),
+			chromedp.Flag("headless", false),
 			chromedp.Flag("hide-scrollbars", false),
 			chromedp.Flag("mute-audio", false),
 		)
