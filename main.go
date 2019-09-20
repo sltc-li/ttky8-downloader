@@ -73,24 +73,22 @@ func main() {
 
 func download(downloadURLs []DownloadURL, nParallel int) {
 	var wg sync.WaitGroup
-	downloadChan := make(chan DownloadURL, nParallel)
-
-	go func() {
-		for du := range downloadChan {
-			if err := du.Download(); err != nil {
-				log.Fatalf("fail to download %s: %v", du.Title, err)
-			}
-			wg.Done()
-		}
-	}()
+	downloadingChan := make(chan bool, nParallel)
 
 	for _, du := range downloadURLs {
 		wg.Add(1)
-		downloadChan <- du
+		downloadingChan <- true
+		go func(du DownloadURL) {
+			if err := du.Download(); err != nil {
+				log.Fatalf("fail to download %s: %v", du.Title, err)
+			}
+			<-downloadingChan
+			wg.Done()
+		}(du)
 	}
 
 	wg.Wait()
-	close(downloadChan)
+	close(downloadingChan)
 }
 
 func collectDownloadURLs(startURL string) ([]DownloadURL, error) {
