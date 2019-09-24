@@ -20,11 +20,14 @@ func main() {
 		log.Fatalln("provide a url or JSON file to download")
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	var downloadURLs []DownloadURL
 
 	if strings.HasPrefix(os.Args[1], "http://") || strings.HasPrefix(os.Args[1], "https://") {
 		var err error
-		downloadURLs, err = collectDownloadURLs(os.Args[1])
+		downloadURLs, err = collectDownloadURLs(ctx, os.Args[1])
 		if err != nil {
 			log.Fatalf("fail to collect download urls: %v", err)
 		}
@@ -53,14 +56,13 @@ func main() {
 		}
 	}()
 
-	quitChan := make(chan interface{})
 	go func() {
-		ctx, cancel := newChromedp(false)
+		dpCtx, cancel := newChromedp(ctx, false)
 		defer cancel()
-		if err := chromedp.Run(ctx, chromedp.Navigate(svr.URL())); err != nil {
+		if err := chromedp.Run(dpCtx, chromedp.Navigate(svr.URL())); err != nil {
 			log.Printf("fail to open server url: %v", err)
 		}
-		<-quitChan
+		<-ctx.Done()
 	}()
 
 	download(downloadURLs, 5)
@@ -68,7 +70,6 @@ func main() {
 	signChan := make(chan os.Signal, 1)
 	signal.Notify(signChan, os.Interrupt)
 	<-signChan
-	close(quitChan)
 }
 
 func download(downloadURLs []DownloadURL, nParallel int) {
@@ -91,7 +92,7 @@ func download(downloadURLs []DownloadURL, nParallel int) {
 	close(downloadingChan)
 }
 
-func collectDownloadURLs(startURL string) ([]DownloadURL, error) {
+func collectDownloadURLs(ctx context.Context, startURL string) ([]DownloadURL, error) {
 	var (
 		baseURL    = strings.Split(startURL, ".com/")[0] + ".com"
 		mp4URLChan = make(chan string, 2)
@@ -101,7 +102,7 @@ func collectDownloadURLs(startURL string) ([]DownloadURL, error) {
 		downloadURLs []DownloadURL
 	)
 
-	ctx, cancel := newChromedp(true)
+	ctx, cancel := newChromedp(ctx, true)
 	defer cancel()
 
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
@@ -176,7 +177,7 @@ func collectDownloadURLs(startURL string) ([]DownloadURL, error) {
 	return downloadURLs, nil
 }
 
-func newChromedp(headless bool) (context.Context, context.CancelFunc) {
+func newChromedp(ctx context.Context, headless bool) (context.Context, context.CancelFunc) {
 	var opts []chromedp.ExecAllocatorOption
 	for _, opt := range chromedp.DefaultExecAllocatorOptions {
 		opts = append(opts, opt)
@@ -189,7 +190,7 @@ func newChromedp(headless bool) (context.Context, context.CancelFunc) {
 		)
 	}
 
-	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), opts...)
+	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
 	ctx, cancel := chromedp.NewContext(allocCtx, chromedp.WithLogf(log.Printf))
 
 	return ctx, func() {
