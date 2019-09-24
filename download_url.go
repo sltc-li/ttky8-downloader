@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -39,7 +40,7 @@ func (du DownloadURL) DownloadedSize() string {
 	return "0"
 }
 
-func (du DownloadURL) Download() error {
+func (du DownloadURL) Download(ctx context.Context) error {
 	downloadedSize := du.DownloadedSize()
 	if downloadedSize != "0" {
 		log.Printf("%s already downloaded %s", du.Mp4File(), downloadedSize)
@@ -47,7 +48,7 @@ func (du DownloadURL) Download() error {
 	}
 
 	shCmd := fmt.Sprintf(`ffmpeg -i "%s" -vcodec copy -c copy -c:a aac "%s"`, du.Mp4URL, du.Mp4File())
-	cmd := exec.Command("sh", "-c", shCmd)
+	cmd := exec.CommandContext(ctx, "sh", "-c", shCmd)
 	err := cmd.Run()
 	if err != nil {
 		return err

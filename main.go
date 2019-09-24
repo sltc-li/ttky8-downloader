@@ -65,14 +65,14 @@ func main() {
 		<-ctx.Done()
 	}()
 
-	download(downloadURLs, 5)
+	download(ctx, downloadURLs, 5)
 
 	signChan := make(chan os.Signal, 1)
 	signal.Notify(signChan, os.Interrupt)
 	<-signChan
 }
 
-func download(downloadURLs []DownloadURL, nParallel int) {
+func download(ctx context.Context, downloadURLs []DownloadURL, nParallel int) {
 	var wg sync.WaitGroup
 	downloadingChan := make(chan bool, nParallel)
 
@@ -80,7 +80,7 @@ func download(downloadURLs []DownloadURL, nParallel int) {
 		wg.Add(1)
 		downloadingChan <- true
 		go func(du DownloadURL) {
-			if err := du.Download(); err != nil {
+			if err := du.Download(ctx); err != nil {
 				log.Fatalf("fail to download %s: %v", du.Title, err)
 			}
 			<-downloadingChan
@@ -97,7 +97,7 @@ func collectDownloadURLs(ctx context.Context, startURL string) ([]DownloadURL, e
 		baseURL    = strings.Split(startURL, ".com/")[0] + ".com"
 		mp4URLChan = make(chan string, 2)
 		titleChan  = make(chan string, 2)
-		quit       = make(chan bool)
+		quit       = make(chan struct{})
 
 		downloadURLs []DownloadURL
 	)
